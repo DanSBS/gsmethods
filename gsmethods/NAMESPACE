@@ -1,0 +1,6 @@
+useDynLib(sgen)
+exportPattern("^[[:alpha:]]+")
+importFrom(Rcpp, evalCpp)
+importFrom(MASS, ginv)
+import(parallel)
+import(abind)
