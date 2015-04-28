@@ -12,8 +12,8 @@
 require(Rcpp)
 Sys.setenv("PKG_CXXFLAGS"="-fopenmp")
 Sys.setenv("PKG_LIBS"="-fopenmp")
-sourceCpp('C:/eclipse/workspace/Tools/smtl/src/gsplasso_v4.cpp')
-
+#sourceCpp('C:/eclipse/workspace/Tools/smtl/src/gsplasso_v4.cpp')
+sourceCpp('C:/Users/samarov/git/gsmethods/gsmethods/src/gsplasso_v4.cpp')
 
 #gspl <-
 ssgl <- function(x, y, ys, k, lamg, rho, nls, max.iter = 1000,
