@@ -2,13 +2,15 @@ require(Rcpp)
 Sys.setenv("PKG_CXXFLAGS"="-fopenmp")
 Sys.setenv("PKG_LIBS"="-fopenmp")
 sourceCpp('C:/Users/samarov/git/gsmethods/gsmethods/src/sgl_v2.cpp')
+sourceCpp('C:/Users/samarov/git/gsmethods/gsmethods/src/smtl_v2.cpp')
 
 smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
-				eps, method = 'smtl', intercept = TRUE,
-				parallel = TRUE, pos = 0, singled = 0, 
-				scale_lambda = FALSE, scale_rho = FALSE, 
-				gam_eps = NULL, ridge_df = FALSE,
-				B_start = NULL, clus = TRUE){
+		eps, method = 'smtl', intercept = TRUE,
+		parallel = TRUE, pos = 0, singled = 0, 
+		scale_lambda = FALSE, scale_rho = FALSE, 
+		gam_eps = NULL, ridge_df = FALSE,
+		B_start = NULL, clus = TRUE, rho2 = 0,
+		chk1 = FALSE){
 	
 	p <- ncol(x)
 	
@@ -44,7 +46,8 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 	else{	
 		k <- ncol(y)
 		C <- t(x) %*% y / nrow(x)
-		D <- array(t(x) %*% x / nrow(x), dim = c(p, p, 1))
+		D <- array(t(x) %*% x / nrow(x) + diag(ncol(x)) * rho2, 
+				dim = c(p, p, 1))
 		dslices <- 1
 	}
 	if(method == 'smtl'){
@@ -123,7 +126,7 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 	if(method == 'smtl')
 		Best <- array(smtl(C, D, B, max.iter, rho, 
 						lambda, gamma, ngam, eps, singled,
-						pos, dslices), 
+						pos, dslices, t(y), x), 
 				dim = c(p, k, ngam))
 	if(method == 'sgl'){
 #		browser()
@@ -151,7 +154,9 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 		Bopt <- parLapply(cl, indx, fun = function(u){
 					
 					candB <- Best[,u,]
-					
+					if(chk1)
+						candB <- candB[,colSums(candB) <= 1]
+#					candB <- t(t(candB)/colSums(candB))
 #					err <- try({chk <- colSums(candAlph) <= 7},TRUE)
 					
 #					if(!all(!chk)){
@@ -159,8 +164,8 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 					if(!is.null(dim(candB))){
 						
 						if(!g_zero)
-							candB <- (1+rho[u])*candB
-						
+							candB <- candB
+#						rho
 						if(singled == 0){
 							xm <- sx[[u]]
 							ym <- sy[[u]]
@@ -176,23 +181,23 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 						if(!is.null(dim(candB))){
 							c0 <- abs(candB) > 0
 #							browser()
-							if(!all(rho == 0) & ridge_df)
-								npars <- apply(c0, 2, function(v) {
-											xm0 <- xm[, v]
-											rho0 <- rho[u]
-											if(length(xm0) == 0)
-												0
-											else{
-#										browser()
-												if(is.null(dim(xm0))){
-													xm0 <- t(rbind(xm0))
-#													rho0 <- rbind(rho0)
-												}
-												
-												xtx0 <- ginv(t(xm0) %*% xm0 + rho0 * diag(ncol(xm0)))
-												sum(apply(xm0, 1, function(w) t(w) %*% xtx0 %*% w))
-											}
-										})
+#							if(!all(rho == 0) & ridge_df)
+#								npars <- apply(c0, 2, function(v) {
+#											xm0 <- xm[, v]
+#											rho0 <- rho[u]
+#											if(length(xm0) == 0)
+#												0
+#											else{
+##										browser()
+#												if(is.null(dim(xm0))){
+#													xm0 <- t(rbind(xm0))
+##													rho0 <- rbind(rho0)
+#												}
+#												
+#												xtx0 <- ginv(t(xm0) %*% xm0 + rho0 * diag(ncol(xm0)))
+#												sum(apply(xm0, 1, function(w) t(w) %*% xtx0 %*% w))
+#											}
+#										})
 							
 #								npars <- apply(c0, 2, function(v) {
 #											xm0 <- xm[, v]
@@ -210,7 +215,7 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 #												sum(apply(xm0, 1, function(w) t(w) %*% xtx0 %*% w))
 #											}
 #										})
-							else
+#							else
 								npars <- colSums(abs(candB) > 0)
 							rss <- colSums((predi - ym)^2)/(nrow(xm) - npars)
 							
@@ -218,9 +223,9 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 							## other yet. The standard LASSO algorithm (or the one
 							## implemented in R uses Cp, will have to think about whic
 							## is most appropriate here).
-#							score <- nrow(xm) * log(rss) + npars * log(nrow(xm))
+							score <- nrow(xm) * log(rss) + npars * log(nrow(xm))
 #							score <- nrow(xm) * log(rss) + 2 * npars
-							score <- (rss * (nrow(xm) - npars))/rss[ngam] - nrow(xm) + 2*npars						
+#							score <- (rss * (nrow(xm) - npars))/rss[ngam] - nrow(xm) + 2*npars						
 							score[is.nan(score)] <- Inf
 							o <- order(score, decreasing = FALSE)[1]
 							candB[,o]
@@ -262,9 +267,11 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 		}
 		else{
 			Bopt <- lapply(indx, FUN = function(u){
-						
+#						browser()
 						candB <- Best[,u,]
-						
+#						browser()
+#						candB <- candB[,colSums(candB) <= 1]
+						candB <- t(t(candB)/colSums(candB))
 #					err <- try({chk <- colSums(candAlph) <= 7},TRUE)
 #						apply(candB)
 #					if(!all(!chk)){
@@ -272,7 +279,7 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 						if(!is.null(dim(candB))){
 							
 #						if(!g_zero)
-							candB <- (1+rho[u])*candB
+#							candB <- (1+rho[u])*candB
 							
 							if(singled == 0){
 								xm <- as.matrix(sx[[u]])
@@ -318,6 +325,7 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 								## BIC
 #							score <- nrow(xm) * log(rss) + npars * log(nrow(xm))
 								## AIC
+#								browser()
 								score <- nrow(xm) * log(rss) + 2 * npars
 								## Cp
 								##score <- (rss * (nrow(xm) - npars))/rss[ngam] - nrow(xm) + 2*npars
@@ -341,6 +349,8 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 					})
 		}
 	}
+	gc()
+#	browser()
 	## Collect the final results
 	if(!clus)
 		Bbest <- t(do.call("rbind", Bopt))
@@ -354,3 +364,75 @@ smtlasso <- function(x, y, grp, lambda, rho, ngam, max.iter,
 	
 }
 
+
+rss <- function(x,y,b){
+#	sum((y - t(b) %*% t(x))^2)
+	sum(rowSums((y - t(b) %*% t(x))^2))
+}
+
+bicG <- function(x, y, b, thresh = 0.001){
+#	DF <- sum(rowMeans(b != 0))
+#	b[abs(b) <= thresh] <- 0
+	nrow(x) * log(rss(x,y,b)/(nrow(x) - sum(rowSums(b) != 0))) +
+#	nrow(y) * log(rss(x,y,b)/(nrow(y) - DF)) +
+#			DF * log(nrow(y))
+			sum(rowSums(b) != 0) * log(nrow(x))	
+}
+
+smtlassoBic <- function(X, Y, grp,
+		rho = 0, ngam = 100,
+		max.iter = 100,
+		eps = 1e-3,
+		method = 'smtl',
+		intercept = FALSE,
+		parallel = TRUE,
+		scale_lambda = FALSE,
+		pos = 1, singled = 1, gam_eps = 1e-10,
+		ridge_df = FALSE,
+		clus = FALSE,
+		lambda_min = NULL,
+		nlam = 10, rho2 = 0,
+		chk1 = FALSE,
+		minFrac = 1e-4,
+		lambda_max = NULL){
+	B <- t(Y) %*% X / nrow(X)
+	
+	if(is.null(lambda_max))
+		lambda_max <- max(colSums(abs(B)))
+	if(is.null(lambda_min))
+		lambda_min <- lambda_max * minFrac
+	
+	lambda_seq <- exp(seq(log(lambda_min), log(lambda_max),, nlam))
+#	lambda_seq <- lambda_seq[floor(seq(1,50,,10))]
+#	nlam <- 10
+#	lambda_seq <- lambda_seq[1:40][floor(seq(1,40,,20))]
+#	nlam <- 20
+#	lambda_seq <- lambda_seq[31:50]
+	res_list <- vector('list', nlam)
+	for(i in 1:nlam){
+		print(paste('Iteration', i))
+		res_list[[i]] <- smtlasso(X, Y, grp = grp, 
+				lambda = lambda_seq[i],
+				rho = rho,
+				ngam = ngam, 
+				max.iter = max.iter,
+				eps = eps,
+				method = method, intercept = intercept, 
+				parallel = parallel,
+				scale_lambda = scale_lambda,
+				pos = pos, singled = singled, 
+				gam_eps = gam_eps, 
+				ridge_df = ridge_df, clus = clus,
+				rho2 = rho2,
+				chk1 = chk1
+				)
+		gc()
+	}
+	
+#	browser()
+	BIC <- unlist(lapply(res_list, function(b){
+						bicG(X, t(Y), b)
+					}))
+	
+	return(list(res_list = res_list, BIC = BIC))
+}

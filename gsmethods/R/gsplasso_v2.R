@@ -13,7 +13,7 @@ require(Rcpp)
 Sys.setenv("PKG_CXXFLAGS"="-fopenmp")
 Sys.setenv("PKG_LIBS"="-fopenmp")
 #sourceCpp('C:/eclipse/workspace/Tools/smtl/src/gsplasso_v4.cpp')
-sourceCpp('C:/Users/samarov/git/gsmethods/gsmethods/src/gsplasso_v4.cpp')
+sourceCpp('C:/Users/samarov/git/gsmethods/gsmethods/src/gsplasso_v5.cpp')
 
 #gspl <-
 ssgl <- function(x, y, ys, k, lamg, rho, nls, max.iter = 1000,
@@ -21,7 +21,10 @@ ssgl <- function(x, y, ys, k, lamg, rho, nls, max.iter = 1000,
 		parallel = FALSE, pos = 0,  
 		nls_eps = NULL, ridge_df = FALSE,
 		B_start = NULL, weight_ones = FALSE,
-		lamsw = NULL){
+		lamsw = NULL,
+		spindx = NULL,
+		gam = NULL,
+		useNbr = 1){
 	
 	## Here y is a hyperspectral data cube
 	## Getting dimensions
@@ -34,7 +37,12 @@ ssgl <- function(x, y, ys, k, lamg, rho, nls, max.iter = 1000,
 	p <- ncol(x)
 	
 	## converting y to a matrix
-	ymat <- matrix(c(y), nr * nc, ns)
+	if(useNbr == 0)
+		ymat <- matrix(c(y), nr * nc, ns)
+	else{
+		ymat <- y
+		ns <- ncol(ymat)
+	}
 	
 	
 	## Check to see if element-wise sparsity has been selected
@@ -48,6 +56,7 @@ ssgl <- function(x, y, ys, k, lamg, rho, nls, max.iter = 1000,
 	
 	## This will be used to get the range for the element-wise
 	## sparse solutions path
+#	browser()
 	C <- t(x) %*% t(ymat) / ns
 	lams <- apply(C, 2, function(u) {
 				maxu <- max(abs(u))
@@ -97,7 +106,8 @@ ssgl <- function(x, y, ys, k, lamg, rho, nls, max.iter = 1000,
 	system.time({Best <- array(gsplasso(x, y, B, k, pos, 
 		 			lams, lamg, rho, w, nls, 
 					nr, nc, ns, eps, max.iter,
-					thresh, ys), 
+					thresh, ys,
+					gam, spindx, useNbr), 
 			dim = c(p, nr * nc, nls))})
 #	browser()
 #	tmp <- gsplasso(x, y, B, k, pos, 
